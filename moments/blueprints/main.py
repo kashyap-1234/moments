@@ -2,11 +2,13 @@ from flask import Blueprint, abort, current_app, flash, redirect, render_templat
 from flask_login import current_user, login_required
 from sqlalchemy import func, select
 from sqlalchemy.orm import with_parent
+import os
 
 from moments.core.extensions import db
 from moments.decorators import confirm_required, permission_required
 from moments.forms.main import CommentForm, DescriptionForm, TagForm
 from moments.models import Collection, Comment, Follow, Notification, Photo, Tag, User
+from moments.ml_utils import analyze_image
 from moments.notifications import push_collect_notification, push_comment_notification
 from moments.utils import flash_errors, redirect_back, rename_image, resize_image, validate_image
 
@@ -63,7 +65,10 @@ def search():
     elif category == 'tag':
         pagination = Tag.query.whooshee_search(q).paginate(page=page, per_page=per_page)
     else:
-        pagination = Photo.query.whooshee_search(q).paginate(page=page, per_page=per_page)
+        # Search for photos by description OR tags
+        stmt = select(Photo).filter(Photo.description.contains(q) | Photo.tags.any(Tag.name.contains(q))).order_by(Photo.created_at.desc())
+        pagination = db.paginate(stmt, page=page, per_page=per_page)
+
     results = pagination.items
     return render_template('main/search.html', q=q, results=results, pagination=pagination, category=category)
 
@@ -130,15 +135,26 @@ def upload():
         if not validate_image(f.filename):
             return 'Invalid image.', 400
         filename = rename_image(f.filename)
-        f.save(current_app.config['MOMENTS_UPLOAD_PATH'] / filename)
+        file_path = os.path.join(current_app.config['MOMENTS_UPLOAD_PATH'], filename)
+        f.save(file_path)
+
         filename_s = resize_image(f, filename, current_app.config['MOMENTS_PHOTO_SIZES']['small'])
         filename_m = resize_image(f, filename, current_app.config['MOMENTS_PHOTO_SIZES']['medium'])
+
+        # 🔹 Minimal Addition: Call ML function from ml_utils.py
+        alt_text, tags = analyze_image(file_path)
         photo = Photo(
-            filename=filename, filename_s=filename_s, filename_m=filename_m, author=current_user._get_current_object()
+            description = alt_text, filename=filename, filename_s=filename_s, filename_m=filename_m, author=current_user._get_current_object()
         )
         db.session.add(photo)
         db.session.commit()
+
+        # Print the results to console for debugging (optional)
+        print(f"Generated Alt Text: {alt_text}")
+        print(f"Detected Tags: {tags}")
+
     return render_template('main/upload.html')
+
 
 
 @main_bp.route('/photo/<int:photo_id>')
