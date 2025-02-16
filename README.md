@@ -47,6 +47,15 @@ Now you can run the app:
 $ pdm run flask run
 * Running on http://127.0.0.1:5000/
 ```
+## Setting up Microsoft Azure
+This step is very crucial as we have used Azure's Computer Vision API for this Homework.
+```
+Step 1: Go to Microsoft Azure website (https://azure.microsoft.com/en-us/) and login.
+Step 2: In the search bar above, type computer vision and click on the computer vision API.
+Step 3: Create a computer vision service and get the Endpoint and Key.
+Step 4: Place those credentials in an .env file and gitignore it to hide the credentials.
+```
+The credentials will be called in the folder ml_utils.py and will be used for the homework.
 
 ## License
 
